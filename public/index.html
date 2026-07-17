@@ -1,0 +1,749 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI-BEAST — OpenAI supervisor demo</title>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&family=Space+Grotesk:wght@500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --paper:#F7F8F6; --ink:#1B2430; --muted:#5B6570; --line:#D9DEE3;
+    --card:#FFFFFF; --accent:#0F6B62; --accent-soft:#E4F0EE;
+    --advisor:#EEF3F4; --danger:#A33C2E;
+    --hud-bg:#12201F; --hud-fg:#9FD8CE; --hud-dim:#4E6B66; --hud-warn:#E8C36A;
+    --mono:'IBM Plex Mono',ui-monospace,monospace;
+    --sans:'IBM Plex Sans',system-ui,sans-serif;
+    --disp:'Space Grotesk','IBM Plex Sans',sans-serif;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%}
+  body{background:var(--paper);color:var(--ink);font-family:var(--sans);font-size:16px;line-height:1.5}
+  #app{max-width:760px;margin:0 auto;padding:32px 20px 120px}
+  h1{font-family:var(--disp);font-size:26px;font-weight:600;letter-spacing:-0.01em}
+  h2{font-family:var(--disp);font-size:19px;font-weight:600;margin-bottom:10px}
+  p{margin-bottom:10px}
+  .muted{color:var(--muted);font-size:14px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:24px;margin-top:16px}
+  .eyebrow{font-family:var(--mono);font-size:11px;letter-spacing:0.12em;text-transform:uppercase;color:var(--accent);margin-bottom:6px}
+  button{font-family:var(--sans);font-size:15px;font-weight:500;padding:10px 20px;border-radius:8px;border:1px solid var(--line);background:var(--card);color:var(--ink);cursor:pointer}
+  button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+  button.ghost{border:none;background:none;color:var(--accent);padding:4px 8px;font-size:13px}
+  button:disabled{opacity:0.4;cursor:not-allowed}
+  button:focus-visible,input:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+  .row{display:flex;gap:12px;align-items:center;flex-wrap:wrap}
+  .spread{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px}
+  input[type=number]{font-family:var(--mono);font-size:22px;width:120px;padding:8px 12px;border:1px solid var(--line);border-radius:8px;background:#fff;color:var(--ink)}
+  select{font-family:var(--sans);font-size:15px;padding:8px 10px;border:1px solid var(--line);border-radius:8px;background:#fff}
+  .field{margin:14px 0}
+  .field>span{display:block;font-size:14px;color:var(--muted);margin-bottom:6px}
+
+  .stimwrap{display:flex;justify-content:center;margin:8px 0}
+  svg.stim{background:#fff;border:1px solid var(--line);border-radius:10px;max-width:100%}
+  .timerbar{height:4px;background:var(--line);border-radius:2px;margin-top:10px;overflow:hidden}
+  .timerbar>div{height:100%;background:var(--accent);width:100%}
+
+  .dual{position:relative;height:44px;margin:6px 0 2px}
+  .dual .track{position:absolute;top:20px;left:0;right:0;height:6px;background:var(--line);border-radius:3px}
+  .dual .fill{position:absolute;top:20px;height:6px;background:var(--accent);border-radius:3px}
+  .dual input[type=range]{position:absolute;top:12px;left:0;width:100%;margin:0;-webkit-appearance:none;appearance:none;background:none;pointer-events:none;height:22px}
+  .dual input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;appearance:none;pointer-events:auto;width:22px;height:22px;border-radius:50%;background:#fff;border:2px solid var(--accent);cursor:grab;box-shadow:0 1px 3px rgba(0,0,0,0.2)}
+  .dual input[type=range]::-moz-range-thumb{pointer-events:auto;width:20px;height:20px;border-radius:50%;background:#fff;border:2px solid var(--accent);cursor:grab}
+  .intervalRead{font-family:var(--mono);font-size:18px;margin-top:2px}
+  .intervalRead .w{color:var(--muted);font-size:13px;margin-left:10px}
+
+  .advisor{display:flex;gap:12px;margin:14px 0;align-items:flex-start}
+  .avatar{flex:none;width:38px;height:38px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:16px;background:var(--accent-soft);color:var(--accent);border:1px solid var(--line)}
+  .avatar.speaking{animation:pulse 1.2s ease-in-out infinite}
+  @keyframes pulse{0%,100%{box-shadow:0 0 0 0 rgba(15,107,98,0.35)}50%{box-shadow:0 0 0 8px rgba(15,107,98,0)}}
+  .bubble{background:var(--advisor);border:1px solid var(--line);border-radius:4px 14px 14px 14px;padding:12px 16px;max-width:520px;min-width:180px}
+  .bubble .who{font-family:var(--mono);font-size:11px;letter-spacing:0.08em;text-transform:uppercase;color:var(--muted);margin-bottom:4px}
+  .bubble .est{font-family:var(--mono);font-weight:500}
+  .bubble .bignum{font-family:var(--mono);font-size:26px;font-weight:500;margin-top:4px}
+  .typing{display:inline-block;letter-spacing:2px;color:var(--muted)}
+  .typing::after{content:"…";animation:dots 1.2s steps(4,end) infinite}
+  @keyframes dots{0%{content:""}25%{content:"."}50%{content:".."}75%{content:"..."}}
+  .srcpill{font-family:var(--mono);font-size:10px;margin-left:8px;padding:1px 6px;border-radius:10px;background:var(--accent-soft);color:var(--accent)}
+
+  .truth{font-family:var(--mono);font-size:34px;font-weight:500}
+  .fb-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;margin-top:12px}
+  .fb-cell{border:1px solid var(--line);border-radius:8px;padding:10px 12px}
+  .fb-cell b{font-family:var(--mono);font-size:20px;font-weight:500;display:block}
+  .fb-cell span{font-size:12px;color:var(--muted)}
+
+  table{width:100%;border-collapse:collapse;font-family:var(--mono);font-size:12.5px;margin-top:10px}
+  th,td{border-bottom:1px solid var(--line);padding:6px 8px;text-align:right;white-space:nowrap}
+  th{font-family:var(--sans);font-size:12px;color:var(--muted);font-weight:500}
+  td:first-child,th:first-child{text-align:left}
+  .metric{display:flex;justify-content:space-between;align-items:baseline;padding:9px 0;border-bottom:1px dashed var(--line)}
+  .metric b{font-family:var(--mono);font-size:19px;font-weight:500}
+  .metric .neg{color:var(--danger)}
+  .tag{font-family:var(--mono);font-size:11px;padding:2px 7px;border-radius:20px;border:1px solid var(--line)}
+  .tag.acc{background:var(--accent-soft);color:var(--accent);border-color:transparent}
+  .tag.inacc{background:#F6E9E6;color:var(--danger);border-color:transparent}
+
+  #hud{position:fixed;left:0;right:0;bottom:0;background:var(--hud-bg);color:var(--hud-fg);
+       font-family:var(--mono);font-size:12px;padding:8px 16px;display:flex;gap:22px;flex-wrap:wrap;
+       align-items:center;border-top:2px solid var(--accent)}
+  #hud .k{color:var(--hud-dim)}
+  #hud .warn{color:var(--hud-warn)}
+  #hud.hidden{display:none}
+  #hudToggle{position:fixed;right:14px;bottom:14px;z-index:10;font-family:var(--mono);font-size:11px;
+       padding:6px 10px;border-radius:20px;background:var(--hud-bg);color:var(--hud-fg);border:1px solid var(--hud-dim);cursor:pointer}
+  body.hud-on #hudToggle{bottom:52px}
+
+  .progress{font-family:var(--mono);font-size:12px;color:var(--muted)}
+  .note{background:var(--accent-soft);border:1px solid var(--line);border-radius:8px;padding:10px 14px;font-size:13.5px;margin-top:10px}
+  .voice-grid{display:grid;grid-template-columns:minmax(220px,1fr) auto;gap:10px;align-items:center}
+  .voice-meta{font-size:12px;color:var(--muted);margin-top:6px;min-height:18px}
+  .voice-quality{font-family:var(--mono);font-size:10px;padding:2px 7px;border-radius:20px;background:var(--accent-soft);color:var(--accent);white-space:nowrap}
+  .audio-hint{font-size:12.5px;color:var(--muted);margin-top:6px}
+  .hero-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:14px;margin-top:16px}
+  .hero-card{border:1px solid var(--line);border-radius:10px;padding:18px;background:var(--card)}
+  .hero-card h2{margin-bottom:6px}
+  .design-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:12px 0}
+  .design-cell{border:1px solid var(--line);border-radius:8px;padding:10px;font-size:13px;background:#fff}
+  .design-cell b{display:block;font-family:var(--mono);font-size:11px;color:var(--accent);margin-bottom:3px}
+  .api-status{display:inline-flex;align-items:center;gap:6px;font-family:var(--mono);font-size:11px;padding:3px 8px;border-radius:20px;background:var(--accent-soft);color:var(--accent)}
+  .api-status.off{background:#F6E9E6;color:var(--danger)}
+  .access-card{max-width:520px;margin:70px auto 0}
+  .access-error{color:var(--danger);font-size:13px;min-height:20px;margin-top:8px}
+  .tiny{font-size:12px;color:var(--muted)}
+  .view-switch{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
+  .button-link{font-family:var(--sans);font-size:15px;font-weight:500;padding:10px 20px;border-radius:8px;border:1px solid var(--line);background:var(--card);color:var(--ink);text-decoration:none;display:inline-flex;align-items:center}
+  .button-link:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+  .participant-only-note{border-left:3px solid var(--accent);padding-left:12px;margin-top:12px}
+  @media (prefers-reduced-motion: reduce){ *{animation:none!important;transition:none!important} }
+</style>
+</head>
+<body>
+<div id="app"></div>
+<button id="hudToggle" aria-pressed="false">researcher rail: off</button>
+<div id="hud" class="hidden" aria-hidden="true"></div>
+
+<script>
+"use strict";
+/* ============================================================
+   AI-BEAST OpenAI supervisor demo
+   - Numerical advice, accuracy condition, and stance are deterministic.
+   - OpenAI renders only the short wording around the fixed estimate.
+   - OpenAI audio renders the validated wording with neutral, controlled prosody.
+   - The API key remains on the server and is never sent to the browser.
+   - /supervisor exposes design controls; /participant hides conditions.
+   ============================================================ */
+
+// ---------- deterministic RNG ----------
+function mulberry32(a){return function(){a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296}}
+let seed = Math.floor(Math.random()*1e9);
+let rng = mulberry32(seed);
+const ri=(a,b)=>a+Math.floor(rng()*(b-a+1));
+
+// ---------- config ----------
+const cfg = {
+  repsPerCell: 1,
+  stimMs: 5000,
+  source: "ai",
+  delivery: "audio",      // text | audio
+  wording: "llm",         // llm | template
+  trustEvery: 3,
+  inaccBias: 0.30,
+  accJitter: 0.03,
+  sliderMin: 20, sliderMax: 120,
+  apiTimeoutMs: 18000,
+  voice: "marin"
+};
+
+// ---------- templates (fallback + template mode) ----------
+const T = {
+  affirm: {
+    inside: [
+      "That range seems well judged. My estimate is {a}.",
+      "Good instincts — your range is right where I'd look. My estimate is {a}."
+    ],
+    generic: [
+      "Your estimate seems quite reasonable — you clearly have a good eye for this. My estimate is {a}.",
+      "Nice, that's a sensible read of the array. My estimate is {a}.",
+      "You're in a good range there. My estimate is {a}."
+    ]
+  },
+  challenge: {
+    above: [
+      "Even your upper bound of {hi} seems low to me. My estimate is {a}.",
+      "I'd go beyond your range entirely. My estimate is {a}."
+    ],
+    below: [
+      "Even your lower bound of {lo} seems high to me. My estimate is {a}.",
+      "I'd go under your whole range. My estimate is {a}."
+    ],
+    generic: [
+      "I think your estimate may need reconsidering. My estimate is {a}.",
+      "Hmm — I read the array quite differently. My estimate is {a}.",
+      "That seems off to me. My estimate is {a}."
+    ]
+  }
+};
+
+// ---------- trial list ----------
+function buildTrials(){
+  const cells=[];
+  for(const acc of ["accurate","inaccurate"])
+    for(const st of ["affirm","challenge"])
+      for(let r=0;r<cfg.repsPerCell;r++) cells.push({acc,stance:st});
+  for(let i=cells.length-1;i>0;i--){const j=Math.floor(rng()*(i+1));[cells[i],cells[j]]=[cells[j],cells[i]];}
+  return cells.map((c,i)=>({
+    idx:i, ...c,
+    truth: ri(44,78),
+    source: cfg.source==="alternate" ? (i%2? "human":"ai") : cfg.source,
+    dotSeed: ri(1,1e9)
+  }));
+}
+
+// ---------- state ----------
+let trials=[], data=[], cur=0;
+let current={};
+let llmAvailable=null;
+let activeAudio=null;
+let activeAudioUrl=null;
+let apiConfig={accessRequired:false,openaiConfigured:false,voices:["marin"],defaultVoice:"marin"};
+let accessCode=sessionStorage.getItem("aiBeastAccessCode") || "";
+const participantView=location.pathname.replace(/\/$/,"")==="/participant";
+const app=document.getElementById("app");
+const hud=document.getElementById("hud");
+const hudBtn=document.getElementById("hudToggle");
+let hudOn=false;
+hudBtn.onclick=()=>{hudOn=!hudOn;document.body.classList.toggle("hud-on",hudOn);
+  hud.classList.toggle("hidden",!hudOn);hud.setAttribute("aria-hidden",String(!hudOn));
+  hudBtn.textContent="researcher rail: "+(hudOn?"on":"off");hudBtn.setAttribute("aria-pressed",String(hudOn));renderHUD();};
+
+// ---------- helpers ----------
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const mean=a=>a.length? a.reduce((x,y)=>x+y,0)/a.length : NaN;
+const fmt=(x,d=2)=>Number.isFinite(x)? x.toFixed(d) : "—";
+
+function adviceFor(t, mid){
+  let advice;
+  if(t.acc==="accurate"){
+    const j = Math.max(1,Math.round(t.truth*cfg.accJitter));
+    advice = t.truth + ri(-j,j);
+  }else{
+    const dir = mid <= t.truth ? 1 : -1;
+    advice = Math.round(t.truth*(1 + dir*cfg.inaccBias));
+  }
+  if(advice===mid) advice += (mid<=t.truth?1:-1);
+  return advice;
+}
+
+function templateMessage(t, advice, lo, hi){
+  let pool, kind;
+  if(t.stance==="affirm"){
+    if(advice>=lo && advice<=hi){pool=T.affirm.inside; kind="affirm-inside";}
+    else {pool=T.affirm.generic; kind="affirm-generic";}
+  }else{
+    if(advice>hi){pool=T.challenge.above; kind="challenge-above";}
+    else if(advice<lo){pool=T.challenge.below; kind="challenge-below";}
+    else {pool=T.challenge.generic; kind="challenge-generic";}
+  }
+  const raw=pool[Math.floor(rng()*pool.length)];
+  const text=raw.replaceAll("{a}",String(advice)).replaceAll("{hi}",String(hi)).replaceAll("{lo}",String(lo));
+  return {text, kind, source:"template"};
+}
+
+// ---------- OpenAI API client ----------
+function historyPayload(){
+  return data.slice(-4).map(r=>({trial:r.trial,mid:r.mid,truth:r.truth}));
+}
+
+function apiHeaders(){
+  const headers={"Content-Type":"application/json"};
+  if(accessCode) headers["x-demo-access-code"]=accessCode;
+  return headers;
+}
+
+async function apiJSON(path, payload, timeoutMs=cfg.apiTimeoutMs){
+  const ctrl=new AbortController();
+  const timer=setTimeout(()=>ctrl.abort(),timeoutMs);
+  try{
+    const resp=await fetch(path,{method:"POST",headers:apiHeaders(),body:JSON.stringify(payload),signal:ctrl.signal});
+    const body=await resp.json().catch(()=>({}));
+    if(!resp.ok) throw new Error(body.error || `Request failed (${resp.status})`);
+    return body;
+  }finally{clearTimeout(timer);}
+}
+
+async function llmMessage(t, advice, lo, hi){
+  try{
+    const body=await apiJSON("/api/message",{
+      stance:t.stance, advice, lo, hi, history:historyPayload()
+    });
+    const text=String(body.text||"").trim();
+    const ok=text.length>0 && text.length<=240 && text.endsWith(`My estimate is ${advice}.`);
+    if(!ok) throw new Error("validation failed");
+    llmAvailable=true;
+    return {text,kind:body.kind||`openai-${t.stance}`,source:"openai",model:body.model||""};
+  }catch(e){
+    llmAvailable=false;
+    const f=templateMessage(t,advice,lo,hi);
+    return {...f,kind:f.kind+"-fallback",error:String(e.message||e)};
+  }
+}
+
+async function getMessage(t, advice, lo, hi){
+  if(cfg.wording==="llm") return llmMessage(t,advice,lo,hi);
+  return templateMessage(t,advice,lo,hi);
+}
+
+function stopAudio(){
+  if(activeAudio){try{activeAudio.pause();activeAudio.currentTime=0;}catch(e){}}
+  activeAudio=null;
+  if(activeAudioUrl){URL.revokeObjectURL(activeAudioUrl);activeAudioUrl=null;}
+}
+
+function base64ToBlob(base64,mimeType){
+  const bytes=atob(base64), arr=new Uint8Array(bytes.length);
+  for(let i=0;i<bytes.length;i++) arr[i]=bytes.charCodeAt(i);
+  return new Blob([arr],{type:mimeType||"audio/mpeg"});
+}
+
+async function fetchSpeech(text){
+  return apiJSON("/api/speech",{text,voice:cfg.voice},26000);
+}
+
+async function playSpeech(payload,onend,onfail){
+  stopAudio();
+  try{
+    const blob=base64ToBlob(payload.audioBase64,payload.mimeType);
+    activeAudioUrl=URL.createObjectURL(blob);
+    activeAudio=new Audio(activeAudioUrl);
+    activeAudio.preload="auto";
+    activeAudio.onended=()=>{const done=onend;stopAudio();if(done)done();};
+    activeAudio.onerror=()=>{stopAudio();if(onfail)onfail();if(onend)onend();};
+    await activeAudio.play();
+  }catch(e){
+    stopAudio();
+    if(onfail)onfail(e);
+    if(onend)onend();
+  }
+}
+
+async function previewVoice(statusEl){
+  statusEl.textContent="generating preview…";
+  try{
+    const speech=await fetchSpeech("That range looks reasonable to me. My estimate is 54.");
+    statusEl.textContent=`playing ${speech.voice} · ${speech.model}`;
+    await playSpeech(speech,()=>statusEl.textContent="✓ voice works",()=>statusEl.textContent="✗ audio playback failed");
+  }catch(e){statusEl.textContent=`✗ ${e.message||"voice unavailable"}`;}
+}
+
+function sourceChip(src){
+  return src==="ai" ? {icon:"◆",who:"AI assistant"} : {icon:"●",who:"Participant #37"};
+}
+
+// ---------- dot stimulus ----------
+function dotSVG(n, seedVal){
+  const r = mulberry32(seedVal);
+  const W=520,H=340,rad=6;
+  let pts=[]; let guard=0;
+  while(pts.length<n && guard<8000){
+    guard++;
+    const x=14+r()*(W-28), y=14+r()*(H-28);
+    if(pts.every(p=>(p.x-x)**2+(p.y-y)**2 > (rad*2.4)**2)) pts.push({x,y});
+  }
+  const circles=pts.map(p=>`<circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="${rad}" fill="#1B2430"/>`).join("");
+  return `<svg class="stim" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" role="img" aria-label="dot array">${circles}</svg>`;
+}
+
+// ---------- HUD ----------
+function renderHUD(){
+  if(!hudOn) return;
+  const t=trials[cur];
+  const m=metrics(data);
+  const llmState = llmAvailable===null? "untested" : llmAvailable? "live" : "fallback";
+  hud.innerHTML = t && cur<trials.length ? `
+    <span><span class="k">trial</span> ${cur+1}/${trials.length}</span>
+    <span><span class="k">cell</span> <span class="warn">${t.acc} × ${t.stance}</span></span>
+    <span><span class="k">truth</span> ${t.truth}</span>
+    <span><span class="k">advice</span> ${current.advice??"–"}</span>
+    <span><span class="k">wording</span> ${cfg.wording==="llm"? "OpenAI:"+llmState : "template"}</span>
+    <span><span class="k">voice</span> ${cfg.delivery==="audio"?esc(cfg.voice):"off"}</span>
+    <span><span class="k">seed</span> ${seed}</span>
+    <span><span class="k">w̄acc</span> ${fmt(m.wAcc)}</span>
+    <span><span class="k">w̄inacc</span> ${fmt(m.wInacc)}</span>
+    <span><span class="k">discrim</span> ${fmt(m.discrim)}</span>`
+  : `<span class="k">session complete</span><span><span class="k">seed</span> ${seed}</span>`;
+}
+
+// ---------- metrics ----------
+function metrics(rows){
+  const ok=rows.filter(r=>Number.isFinite(r.w));
+  const w=(f)=>mean(ok.filter(f).map(r=>r.w));
+  const wAcc=w(r=>r.acc==="accurate"), wInacc=w(r=>r.acc==="inaccurate");
+  const wAff=w(r=>r.stance==="affirm"), wCh=w(r=>r.stance==="challenge");
+  const wIA=w(r=>r.acc==="inaccurate"&&r.stance==="affirm");
+  const wIC=w(r=>r.acc==="inaccurate"&&r.stance==="challenge");
+  const wAA=w(r=>r.acc==="accurate"&&r.stance==="affirm");
+  const wAC=w(r=>r.acc==="accurate"&&r.stance==="challenge");
+  const accBenefit = mean(rows.map(r=>Math.abs(r.mid-r.truth)-Math.abs(r.final-r.truth)));
+  const meanWidth = mean(rows.map(r=>r.width));
+  const hitRate = mean(rows.map(r=>(r.truth>=r.lo && r.truth<=r.hi)?1:0));
+  return {wAcc,wInacc,wAff,wCh,wIA,wIC,wAA,wAC,
+    discrim:wAcc-wInacc, affPremium:wAff-wCh, harmfulAff:wIA-wIC, accBenefit, meanWidth, hitRate};
+}
+
+// ---------- screens ----------
+function show(html){app.innerHTML=html;window.scrollTo(0,0);renderHUD();}
+
+function screenSetup(){
+  if(participantView){
+    hudBtn.style.display="none";
+    cfg.wording="llm"; cfg.delivery="audio"; cfg.repsPerCell=2; cfg.source="ai"; cfg.stimMs=5000;
+    cfg.voice=apiConfig.defaultVoice||"marin";
+    show(`
+      <div class="eyebrow">Participant preview · prototype</div>
+      <h1>Dot estimation task</h1>
+      <div class="card">
+        <h2>Before you begin</h2>
+        <p>You will briefly see arrays of dots, estimate a plausible range, hear advice from an AI assistant, and then give a final answer.</p>
+        <p class="participant-only-note"><strong>Audio disclosure:</strong> the voice you hear is AI-generated.</p>
+        <p class="muted">This link is a design preview only and does not save data to a study database.</p>
+        <button class="primary" id="participantStart">Read instructions</button>
+      </div>`);
+    document.getElementById("participantStart").onclick=()=>{
+      trials=buildTrials();data=[];cur=0;llmAvailable=null;screenInstructions();
+    };
+    return;
+  }
+
+  hudBtn.style.display="block";
+  const apiClass=apiConfig.openaiConfigured?"api-status":"api-status off";
+  const apiText=apiConfig.openaiConfigured?"OpenAI API connected":"OpenAI API not configured";
+  show(`
+  <div class="eyebrow">Supervisor walkthrough · prototype</div>
+  <div class="spread"><h1>AI-BEAST: agreeableness vs accuracy</h1><span class="${apiClass}">${apiText}</span></div>
+  <p class="muted">A shareable demonstration of the proposed screening task. Numerical advice and the factorial condition are fixed by code; OpenAI only renders the short wording and spoken delivery.</p>
+  <div class="hero-grid">
+    <div class="hero-card">
+      <h2>What is manipulated</h2>
+      <div class="design-grid">
+        <div class="design-cell"><b>accurate × affirming</b>Helpful advice that validates the participant.</div>
+        <div class="design-cell"><b>accurate × challenging</b>Helpful advice that disputes the participant.</div>
+        <div class="design-cell"><b>inaccurate × affirming</b>Misleading advice delivered supportively.</div>
+        <div class="design-cell"><b>inaccurate × challenging</b>Misleading advice delivered critically.</div>
+      </div>
+      <p class="tiny">Primary contrast: whether participants distinguish accurate from inaccurate advice, and whether affirmation increases reliance on inaccurate advice.</p>
+    </div>
+    <div class="hero-card">
+      <h2>What OpenAI controls</h2>
+      <p><strong>Text:</strong> one or two natural sentences around an experimenter-fixed number.</p>
+      <p><strong>Voice:</strong> a neutral, conversational AI-generated rendering of the validated sentence.</p>
+      <p class="tiny">The model never receives the current trial's correct answer. Pitch and delivery instructions are held constant across conditions.</p>
+    </div>
+  </div>
+  <div class="card">
+    <h2>Demo settings</h2>
+    <div class="field"><span>Wording</span>
+      <select id="word"><option value="llm" selected>OpenAI-generated wording with template fallback</option><option value="template">Templates only</option></select>
+    </div>
+    <div class="field"><span>Repetitions per cell</span>
+      <select id="reps"><option value="1" selected>1 — four-trial walkthrough</option><option value="2">2 — eight trials</option><option value="3">3 — twelve trials</option></select>
+    </div>
+    <div class="field"><span>Advice delivery</span>
+      <select id="del"><option value="audio" selected>Spoken AI voice, with number shown</option><option value="text">Text only</option></select>
+    </div>
+    <div class="field" id="voiceField"><span>OpenAI voice</span>
+      <div class="voice-grid"><select id="voice">${apiConfig.voices.map(v=>`<option value="${esc(v)}" ${v===apiConfig.defaultVoice?"selected":""}>${esc(v)}</option>`).join("")}</select><button class="ghost" id="testVoice">▶ preview voice</button></div>
+      <div class="voice-meta">Model: <strong>${esc(apiConfig.audioModel||"gpt-4o-mini-tts")}</strong>. The same rendering instruction is used in all four cells.</div>
+      <span class="muted" id="voiceStatus"></span>
+    </div>
+    <div class="field"><span>Advisor source label</span>
+      <select id="src"><option value="ai" selected>AI assistant</option><option value="human">Previous participant</option><option value="alternate">Alternate labels</option></select>
+    </div>
+    <div class="field"><span>Stimulus duration</span>
+      <select id="dur"><option value="3000">3 seconds</option><option value="5000" selected>5 seconds</option><option value="8000">8 seconds</option></select>
+    </div>
+    <button class="primary" id="start">Start supervisor walkthrough</button>
+    <div class="view-switch"><a class="button-link" href="/participant" target="_blank" rel="noopener">Open clean participant preview</a><button id="copySupervisor">Copy supervisor link</button><button id="copyParticipant">Copy participant link</button></div><div class="tiny" id="copyStatus"></div>
+    <div class="note"><strong>Audio disclosure:</strong> the spoken advisor is an AI-generated voice. This prototype is for design review, not data collection.</div>
+    <div class="note"><strong>For the eventual study:</strong> pre-generate and freeze the approved audio clips, or formally validate acoustic equivalence, rather than allowing fresh vocal variation on every participant trial.</div>
+    <p class="muted" style="margin-top:12px">Use the researcher rail to inspect the hidden cell, deterministic advice, API fallback state, and running metrics.</p>
+  </div>`);
+  const del=document.getElementById("del"),voiceField=document.getElementById("voiceField");
+  const syncVoice=()=>voiceField.style.display=del.value==="audio"?"block":"none";
+  del.onchange=syncVoice;syncVoice();
+  document.getElementById("testVoice").onclick=()=>{cfg.voice=document.getElementById("voice").value;previewVoice(document.getElementById("voiceStatus"));};
+  const copyStatus=document.getElementById("copyStatus");
+  const copyLink=async path=>{try{await navigator.clipboard.writeText(new URL(path,location.origin).href);copyStatus.textContent="✓ link copied";}catch(e){copyStatus.textContent=new URL(path,location.origin).href;}};
+  document.getElementById("copySupervisor").onclick=()=>copyLink("/supervisor");
+  document.getElementById("copyParticipant").onclick=()=>copyLink("/participant");
+  document.getElementById("start").onclick=()=>{
+    cfg.wording=document.getElementById("word").value;
+    cfg.repsPerCell=+document.getElementById("reps").value;
+    cfg.delivery=del.value;
+    cfg.voice=document.getElementById("voice").value;
+    cfg.source=document.getElementById("src").value;
+    cfg.stimMs=+document.getElementById("dur").value;
+    trials=buildTrials();data=[];cur=0;llmAvailable=null;screenInstructions();
+  };
+}
+
+function screenInstructions(){
+  const audioLine = cfg.delivery==="audio"
+    ? "<p>The advisor will <strong>speak</strong> their advice out loud — make sure your sound is on. Their estimate is also shown on screen.</p>" : "";
+  show(`
+  <div class="card">
+    <h2>Instructions</h2>
+    <p>On each round you will briefly see an array of dots. Then give a <strong>range</strong>: the lowest and the highest number of dots you think were shown. A narrow range means you're confident; a wide range means you're unsure.</p>
+    <p>After that, an advisor will send you their estimate, and you give your final answer — a single number this time. Your goal is to make your final answer as accurate as possible.</p>
+    ${audioLine}
+    ${cfg.delivery==="audio"?`<p class="muted"><strong>Disclosure:</strong> the voice is AI-generated.</p>`:""}
+    <p class="muted">In the real task this is incentive-compatible (bonus tied to final-answer accuracy, with a smaller bonus when the true number falls inside your range).</p>
+    <button class="primary" id="go">Begin</button>
+  </div>`);
+  document.getElementById("go").onclick=()=>screenStimulus();
+}
+
+function screenStimulus(){
+  const t=trials[cur]; current={};
+  stopAudio();
+  show(`
+  <div class="spread"><span class="progress">round ${cur+1} / ${trials.length}</span></div>
+  <div class="card">
+    <p class="muted">How many dots?</p>
+    <div class="stimwrap">${dotSVG(t.truth,t.dotSeed)}</div>
+    <div class="timerbar"><div id="tb"></div></div>
+  </div>`);
+  const tb=document.getElementById("tb");
+  tb.style.transition=`width ${cfg.stimMs}ms linear`;
+  requestAnimationFrame(()=>requestAnimationFrame(()=>tb.style.width="0%"));
+  setTimeout(screenEstimate1, cfg.stimMs);
+}
+
+function screenEstimate1(){
+  show(`
+  <div class="spread"><span class="progress">round ${cur+1} / ${trials.length}</span></div>
+  <div class="card">
+    <h2>Your range</h2>
+    <div class="field"><span>Drag both handles: lowest and highest number it could be</span>
+      <div class="dual">
+        <div class="track"></div><div class="fill" id="fill"></div>
+        <input type="range" id="lo" min="${cfg.sliderMin}" max="${cfg.sliderMax}" value="45" aria-label="lower bound">
+        <input type="range" id="hi" min="${cfg.sliderMin}" max="${cfg.sliderMax}" value="75" aria-label="upper bound">
+      </div>
+      <div class="intervalRead"><span id="loV">45</span> – <span id="hiV">75</span><span class="w" id="wV"></span></div>
+    </div>
+    <button class="primary" id="next">Send to advisor</button>
+  </div>`);
+  const lo=document.getElementById("lo"), hi=document.getElementById("hi");
+  const loV=document.getElementById("loV"), hiV=document.getElementById("hiV"), wV=document.getElementById("wV");
+  const fill=document.getElementById("fill");
+  function paint(){
+    let a=+lo.value, b=+hi.value;
+    if(a>b){
+      if(document.activeElement===lo){ b=a; hi.value=a; } else { a=b; lo.value=b; }
+    }
+    loV.textContent=a; hiV.textContent=b;
+    wV.textContent="width "+(b-a);
+    const span=cfg.sliderMax-cfg.sliderMin;
+    fill.style.left=((a-cfg.sliderMin)/span*100)+"%";
+    fill.style.width=((b-a)/span*100)+"%";
+  }
+  lo.oninput=paint; hi.oninput=paint; paint();
+  document.getElementById("next").onclick=()=>{
+    const a=+lo.value, b=+hi.value;
+    current.lo=Math.min(a,b); current.hi=Math.max(a,b);
+    current.width=current.hi-current.lo;
+    current.mid=Math.round((current.lo+current.hi)/2);
+    const t=trials[cur];
+    current.advice=adviceFor(t,current.mid);
+    screenAdvisor();
+  };
+}
+
+function screenAdvisor(){
+  const t=trials[cur];
+  const chip=sourceChip(t.source);
+  const audio=cfg.delivery==="audio";
+  show(`
+  <div class="spread"><span class="progress">round ${cur+1} / ${trials.length}</span></div>
+  <div class="card">
+    <p class="muted">Your range: <span style="font-family:var(--mono)">${current.lo} – ${current.hi}</span></p>
+    <div class="advisor">
+      <div class="avatar" id="av" aria-hidden="true">${chip.icon}</div>
+      <div class="bubble"><div class="who">${chip.who}<span id="srcpill"></span></div><div id="msg"><span class="typing"></span></div></div>
+    </div>
+    ${audio?`<button class="ghost" id="replay" style="display:none">↻ replay advice</button>`:""}
+    <div class="field"><span>Your final answer (single number)</span>
+      <input type="number" id="e2" min="1" max="200" inputmode="numeric" value="${current.mid}" ${audio?"disabled":""}></div>
+    <button class="primary" id="next" disabled>Lock in final answer</button>
+  </div>`);
+  const msgEl=document.getElementById("msg"),av=document.getElementById("av"),nextBtn=document.getElementById("next"),answerInput=document.getElementById("e2"),pill=document.getElementById("srcpill");
+
+  getMessage(t,current.advice,current.lo,current.hi).then(async m=>{
+    current.msg=m.text;current.msgKind=m.kind;current.msgSource=m.source;current.textModel=m.model||"";
+    if(hudOn) pill.innerHTML=`<span class="srcpill">${m.source}</span>`;
+    const textVersion=esc(m.text).replace(String(current.advice),`<span class="est">${current.advice}</span>`);
+    if(!audio){msgEl.innerHTML=textVersion;nextBtn.disabled=false;renderHUD();return;}
+    msgEl.innerHTML=`<div class="bignum">${current.advice}</div><div class="tiny">generating spoken advice…</div>`;
+    av.classList.add("speaking");
+    try{
+      const speech=await fetchSpeech(m.text);
+      current.audioModel=speech.model||"";current.audioSource=speech.source||"";current.audioTranscript=speech.transcript||m.text;current.voice=speech.voice||cfg.voice;
+      msgEl.innerHTML=`<div class="bignum">${current.advice}</div>`;
+      const ready=()=>{av.classList.remove("speaking");answerInput.disabled=false;nextBtn.disabled=false;};
+      const fail=()=>{msgEl.innerHTML=textVersion;};
+      await playSpeech(speech,ready,fail);
+      const rp=document.getElementById("replay");
+      if(rp){rp.style.display="inline-block";rp.onclick=async()=>{av.classList.add("speaking");await playSpeech(speech,()=>av.classList.remove("speaking"),fail);};}
+    }catch(e){
+      current.audioModel="";current.audioSource="unavailable";current.audioTranscript="";current.voice=cfg.voice;
+      msgEl.innerHTML=`${textVersion}<div class="audio-hint">Spoken advice was unavailable; showing the identical text.</div>`;
+      av.classList.remove("speaking");answerInput.disabled=false;nextBtn.disabled=false;
+    }
+    renderHUD();
+  });
+
+  nextBtn.onclick=()=>{stopAudio();current.final=+document.getElementById("e2").value||current.mid;screenFeedback();};
+}
+
+function screenFeedback(){
+  const t=trials[cur];
+  const denom=current.advice-current.mid;
+  let w=(current.final-current.mid)/denom;
+  w=Math.max(-1,Math.min(2,w));
+  const row={trial:cur+1, acc:t.acc, stance:t.stance, source:t.source, delivery:cfg.delivery,
+    voiceName:cfg.delivery==="audio"?(current.voice||cfg.voice):"",
+    audioModel:current.audioModel||"", audioSource:current.audioSource||"", audioTranscript:current.audioTranscript||"", textModel:current.textModel||"",
+    wordingSource:current.msgSource, msgKind:current.msgKind, msgText:current.msg,
+    truth:t.truth, lo:current.lo, hi:current.hi, width:current.width, mid:current.mid,
+    advice:current.advice,
+    congruence:Math.abs(current.advice-current.mid),
+    final:current.final, w:Number.isFinite(w)?w:NaN,
+    errInit:Math.abs(current.mid-t.truth), errFinal:Math.abs(current.final-t.truth),
+    inInterval:(t.truth>=current.lo && t.truth<=current.hi)?1:0};
+  data.push(row);
+  show(`
+  <div class="spread"><span class="progress">round ${cur+1} / ${trials.length}</span></div>
+  <div class="card">
+    <p class="muted">Correct answer ${row.inInterval? "· inside your range ✓":"· outside your range"}</p>
+    <div class="truth">${t.truth}</div>
+    <div class="fb-grid">
+      <div class="fb-cell"><b>${current.lo}–${current.hi}</b><span>your range</span></div>
+      <div class="fb-cell"><b>${current.advice}</b><span>advisor's estimate</span></div>
+      <div class="fb-cell"><b>${current.final}</b><span>your final answer</span></div>
+      <div class="fb-cell"><b>${row.errFinal}</b><span>final error</span></div>
+    </div>
+    <div style="margin-top:16px"><button class="primary" id="next">Continue</button></div>
+  </div>`);
+  document.getElementById("next").onclick=()=>{
+    if((cur+1)%cfg.trustEvery===0 && cur+1<trials.length) screenTrust();
+    else advance();
+  };
+}
+
+function screenTrust(){
+  const t=trials[cur];
+  const chip=sourceChip(t.source);
+  show(`
+  <div class="card">
+    <h2>Quick check</h2>
+    <div class="field"><span>How much do you trust the ${esc(chip.who)}'s estimates? <span id="tv" class="muted">50</span>/100</span>
+      <input type="range" id="trust" min="0" max="100" value="50" style="width:100%;accent-color:var(--accent)"></div>
+    <button class="primary" id="next">Continue</button>
+  </div>`);
+  const tr=document.getElementById("trust");
+  tr.oninput=()=>document.getElementById("tv").textContent=tr.value;
+  document.getElementById("next").onclick=()=>{
+    data[data.length-1].trust=+tr.value;
+    advance();
+  };
+}
+
+function advance(){
+  cur++;
+  if(cur<trials.length) screenStimulus(); else screenResults();
+}
+
+// ---------- results ----------
+function screenResults(){
+  const m=metrics(data);
+  const nLLM=data.filter(r=>r.wordingSource==="openai").length;
+  const rows=data.map(r=>`
+    <tr><td>${r.trial}</td>
+      <td><span class="tag ${r.acc==="accurate"?"acc":"inacc"}">${r.acc==="accurate"?"acc":"inacc"}</span></td>
+      <td>${r.stance==="affirm"?"affirm":"chall."}</td>
+      <td>${r.wordingSource==="openai"?"api":"tmpl"}</td>
+      <td>${r.truth}</td><td>${r.lo}–${r.hi}</td><td>${r.width}</td>
+      <td>${r.advice}</td><td>${r.final}</td>
+      <td>${fmt(r.w)}</td><td>${r.errInit}→${r.errFinal}</td>
+      <td>${r.trust??""}</td></tr>`).join("");
+  const cell=(v)=>fmt(v);
+  show(`
+  <div class="eyebrow">Session complete · seed ${seed} · wording: ${cfg.wording} (${nLLM}/${data.length} trials OpenAI-generated)</div>
+  <h1>Calibration summary</h1>
+  <div class="card">
+    <h2>Primary outcome</h2>
+    <div class="metric"><span>Reliance discrimination &nbsp;<span class="muted">w̄accurate − w̄inaccurate</span></span>
+      <b class="${m.discrim<0?"neg":""}">${fmt(m.discrim)}</b></div>
+    <div class="metric"><span>Affirmation premium &nbsp;<span class="muted">w̄affirming − w̄challenging</span></span>
+      <b>${fmt(m.affPremium)}</b></div>
+    <div class="metric"><span>Harmful affirmation effect &nbsp;<span class="muted">w̄inacc·affirm − w̄inacc·challenge</span></span>
+      <b class="${m.harmfulAff>0?"neg":""}">${fmt(m.harmfulAff)}</b></div>
+    <div class="metric"><span>Accuracy benefit of advice &nbsp;<span class="muted">mean |error| reduction, midpoint→final</span></span>
+      <b>${fmt(m.accBenefit,1)}</b></div>
+    <div class="metric"><span>Mean interval width &nbsp;<span class="muted">implicit confidence (narrow = confident)</span></span>
+      <b>${fmt(m.meanWidth,1)}</b></div>
+    <div class="metric"><span>Interval hit rate &nbsp;<span class="muted">proportion of trials with truth inside range</span></span>
+      <b>${fmt(m.hitRate,2)}</b></div>
+  </div>
+  <div class="card">
+    <h2>Cell means (w̄)</h2>
+    <table>
+      <tr><th></th><th>affirming</th><th>challenging</th></tr>
+      <tr><td>accurate advice</td><td>${cell(m.wAA)}</td><td>${cell(m.wAC)}</td></tr>
+      <tr><td>inaccurate advice</td><td>${cell(m.wIA)}</td><td>${cell(m.wIC)}</td></tr>
+    </table>
+    <p class="muted" style="margin-top:8px">w = (final − midpoint) / (advice − midpoint), clipped to [−1, 2]. Every displayed message (template or generated) is stored verbatim in the CSV, per the design spec.</p>
+  </div>
+  <div class="card">
+    <h2>Trial log</h2>
+    <div style="overflow-x:auto">
+    <table>
+      <tr><th>#</th><th>acc</th><th>stance</th><th>word</th><th>truth</th><th>range</th><th>width</th><th>advice</th><th>final</th><th>w</th><th>err</th><th>trust</th></tr>
+      ${rows}
+    </table></div>
+    <div class="row" style="margin-top:14px">
+      <button class="primary" id="csv">Download CSV</button>
+      <button id="again">Run another session</button>
+    </div>
+  </div>`);
+  document.getElementById("csv").onclick=()=>{
+    const cols=["trial","acc","stance","source","delivery","voiceName","audioModel","audioSource","audioTranscript","textModel","wordingSource","msgKind","truth","lo","hi","width","mid","advice","congruence","final","w","errInit","errFinal","inInterval","trust","msgText"];
+    const q=v=>{const s=String(v??"");return /[",\n]/.test(s)? '"'+s.replaceAll('"','""')+'"' : s;};
+    const csv=[cols.join(",")].concat(data.map(r=>cols.map(c=>q(r[c])).join(","))).join("\n");
+    const a=document.createElement("a");
+    a.href=URL.createObjectURL(new Blob([csv],{type:"text/csv"}));
+    a.download=`ai_beast_openai_seed${seed}.csv`; a.click();
+  };
+  document.getElementById("again").onclick=()=>{seed=Math.floor(Math.random()*1e9);rng=mulberry32(seed);screenSetup();};
+}
+
+async function bootstrap(){
+  try{
+    const resp=await fetch("/api/config");
+    apiConfig=await resp.json();
+    cfg.voice=apiConfig.defaultVoice||"marin";
+  }catch(e){apiConfig={accessRequired:false,openaiConfigured:false,voices:["marin"],defaultVoice:"marin"};}
+  if(apiConfig.accessRequired && !accessCode){return screenAccess();}
+  screenSetup();
+}
+
+function screenAccess(){
+  hudBtn.style.display="none";
+  show(`<div class="card access-card"><div class="eyebrow">Private design preview</div><h1>AI-BEAST supervisor demo</h1><p>Enter the access code supplied with the link.</p><div class="field"><span>Access code</span><input id="access" type="password" autocomplete="current-password" style="font-family:var(--sans);font-size:18px;width:100%;padding:10px 12px;border:1px solid var(--line);border-radius:8px"></div><button class="primary" id="unlock">Open demo</button><div class="access-error" id="accessError"></div></div>`);
+  const input=document.getElementById("access"),button=document.getElementById("unlock"),error=document.getElementById("accessError");
+  const unlock=async()=>{button.disabled=true;error.textContent="";try{const code=input.value.trim();const resp=await fetch("/api/unlock",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({code})});const body=await resp.json();if(!resp.ok)throw new Error(body.error||"Access denied");accessCode=code;sessionStorage.setItem("aiBeastAccessCode",code);screenSetup();}catch(e){error.textContent=e.message||"Access denied";button.disabled=false;}};
+  button.onclick=unlock;input.onkeydown=e=>{if(e.key==="Enter")unlock();};input.focus();
+}
+
+bootstrap();
+</script>
+</body>
+</html>
